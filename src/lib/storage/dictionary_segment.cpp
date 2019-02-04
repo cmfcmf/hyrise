@@ -4,6 +4,7 @@
 #include <string>
 
 #include "resolve_type.hpp"
+#include <storage/segment_iterables/create_iterable_from_attribute_vector.hpp>
 #include "storage/vector_compression/base_compressed_vector.hpp"
 #include "storage/vector_compression/resolve_compressed_vector_type.hpp"
 #include "type_cast.hpp"
@@ -190,22 +191,20 @@ template <typename T>
 ChunkOffset DictionarySegment<T>::get_first_offset(const AllTypeVariant& search_value,
                                                    const std::shared_ptr<const PosList>& position_filter) const {
   Assert(_sort_order, "The segment needs to be sorted to calculate the first bound.");
+  ChunkOffset res = 0;
 
   const auto non_null_begin = get_non_null_begin_offset(position_filter);
   const auto non_null_end = get_non_null_end_offset(position_filter);
 
-  const auto casted_search_value = type_cast_variant<T>(search_value);
-
-  ChunkOffset res = 0;
-
   resolve_compressed_vector_type(*_attribute_vector, [&](const auto& attribute_vector) {
+    const auto search_value_id = static_cast<uint32_t>(lower_bound(search_value));
     if (_sort_order.value() == OrderByMode::Ascending || _sort_order.value() == OrderByMode::AscendingNullsLast) {
       if (position_filter != nullptr) {
         // TODO(someone): if possible remove dictionary lookup in lambda function and just work on the value ids
         const auto result =
-            std::lower_bound(position_filter->cbegin(), position_filter->cend(), casted_search_value,
+            std::lower_bound(position_filter->cbegin(), position_filter->cend(), search_value_id,
                              [&](const auto& row_id, const auto& search) {
-                               return _dictionary->operator[](_decompressor->get(row_id.chunk_offset)) < search;
+                               return _decompressor->get(row_id.chunk_offset) < search;
                              });
         if (result == position_filter->cend()) {
           res = INVALID_CHUNK_OFFSET;
@@ -216,8 +215,8 @@ ChunkOffset DictionarySegment<T>::get_first_offset(const AllTypeVariant& search_
         const auto begin = attribute_vector.cbegin() + non_null_begin;
         const auto end = attribute_vector.cbegin() + non_null_end;
         const auto result = std::lower_bound(
-            begin, end, casted_search_value,
-            [&](const auto& value_id, const auto& search) { return _dictionary->operator[](value_id) < search; });
+            begin, end, search_value_id,
+            [&](const auto& value_id, const auto& search) { return value_id < search; });
         if (result == end) {
           res = INVALID_CHUNK_OFFSET;
         } else {
@@ -228,9 +227,9 @@ ChunkOffset DictionarySegment<T>::get_first_offset(const AllTypeVariant& search_
       if (position_filter != nullptr) {
         // TODO(someone): if possible remove dictionary lookup in lambda function and just work on the value ids
         const auto result =
-            std::lower_bound(position_filter->cbegin(), position_filter->cend(), casted_search_value,
+            std::lower_bound(position_filter->cbegin(), position_filter->cend(), search_value_id,
                              [&](const auto& row_id, const auto& search) {
-                               return _dictionary->operator[](_decompressor->get(row_id.chunk_offset)) > search;
+                               return _decompressor->get(row_id.chunk_offset) > search;
                              });
         if (result == position_filter->cend()) {
           res = INVALID_CHUNK_OFFSET;
@@ -241,8 +240,8 @@ ChunkOffset DictionarySegment<T>::get_first_offset(const AllTypeVariant& search_
         const auto begin = attribute_vector.cbegin() + non_null_begin;
         const auto end = attribute_vector.cbegin() + non_null_end;
         const auto result = std::lower_bound(
-            begin, end, casted_search_value,
-            [&](const auto& value_id, const auto& search) { return _dictionary->operator[](value_id) > search; });
+            begin, end, search_value_id,
+            [&](const auto& value_id, const auto& search) { return value_id > search; });
         if (result == end) {
           res = INVALID_CHUNK_OFFSET;
         } else {
@@ -263,18 +262,17 @@ ChunkOffset DictionarySegment<T>::get_last_offset(const AllTypeVariant& search_v
   const auto non_null_begin = get_non_null_begin_offset(position_filter);
   const auto non_null_end = get_non_null_end_offset(position_filter);
 
-  const auto casted_search_value = type_cast_variant<T>(search_value);
-
   ChunkOffset res = 0;
 
   resolve_compressed_vector_type(*_attribute_vector, [&](const auto& attribute_vector) {
+    const auto search_value_id = static_cast<uint32_t>(lower_bound(search_value));
     if (_sort_order.value() == OrderByMode::Ascending || _sort_order.value() == OrderByMode::AscendingNullsLast) {
       if (position_filter != nullptr) {
         // TODO(someone): if possible remove dictionary lookup in lambda function and just work on the value ids
         const auto result =
-            std::upper_bound(position_filter->cbegin(), position_filter->cend(), casted_search_value,
+            std::upper_bound(position_filter->cbegin(), position_filter->cend(), search_value_id,
                              [&](const auto& search, const auto& row_id) {
-                               return search < _dictionary->operator[](_decompressor->get(row_id.chunk_offset));
+                               return search < _decompressor->get(row_id.chunk_offset);
                              });
         if (result == position_filter->cend()) {
           res = INVALID_CHUNK_OFFSET;
@@ -285,8 +283,8 @@ ChunkOffset DictionarySegment<T>::get_last_offset(const AllTypeVariant& search_v
         const auto begin = attribute_vector.cbegin() + non_null_begin;
         const auto end = attribute_vector.cbegin() + non_null_end;
         const auto result = std::upper_bound(
-            begin, end, casted_search_value,
-            [&](const auto& search, const auto& value_id) { return search < _dictionary->operator[](value_id); });
+            begin, end, search_value_id,
+            [&](const auto& search, const auto& value_id) { return search < value_id; });
         if (result == end) {
           res = INVALID_CHUNK_OFFSET;
         } else {
@@ -297,9 +295,9 @@ ChunkOffset DictionarySegment<T>::get_last_offset(const AllTypeVariant& search_v
       if (position_filter != nullptr) {
         // TODO(someone): if possible remove dictionary lookup in lambda function and just work on the value ids
         const auto result =
-            std::upper_bound(position_filter->cbegin(), position_filter->cend(), casted_search_value,
+            std::upper_bound(position_filter->cbegin(), position_filter->cend(), search_value_id,
                              [&](const auto& search, const auto& row_id) {
-                               return search > _dictionary->operator[](_decompressor->get(row_id.chunk_offset));
+                               return search > _decompressor->get(row_id.chunk_offset);
                              });
         if (result == position_filter->cend()) {
           res = INVALID_CHUNK_OFFSET;
@@ -310,8 +308,8 @@ ChunkOffset DictionarySegment<T>::get_last_offset(const AllTypeVariant& search_v
         const auto begin = attribute_vector.cbegin() + non_null_begin;
         const auto end = attribute_vector.cbegin() + non_null_end;
         const auto result = std::upper_bound(
-            begin, end, casted_search_value,
-            [&](const auto& search, const auto& value_id) { return search > _dictionary->operator[](value_id); });
+            begin, end, search_value_id,
+            [&](const auto& search, const auto& value_id) { return search > value_id; });
         if (result == end) {
           res = INVALID_CHUNK_OFFSET;
         } else {

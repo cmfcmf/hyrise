@@ -10,6 +10,7 @@
 #include "storage/segment_iterables/create_iterable_from_attribute_vector.hpp"
 #include "storage/segment_iterate.hpp"
 
+#include <valgrind/callgrind.h>
 #include "resolve_type.hpp"
 #include "type_comparison.hpp"
 
@@ -36,6 +37,7 @@ void ColumnVsValueTableScanImpl::_scan_non_reference_segment(
   }
 
   resolve_data_and_segment_type(segment, [&](const auto type, const auto& typed_segment) {
+//    CALLGRIND_START_INSTRUMENTATION;
     if (typed_segment.sort_order()) {
       _scan_sorted_segment(segment, chunk_id, matches, position_filter);
     } else {
@@ -46,6 +48,7 @@ void ColumnVsValueTableScanImpl::_scan_non_reference_segment(
         _scan_generic_segment(segment, chunk_id, matches, position_filter);
       }
     }
+//    CALLGRIND_STOP_INSTRUMENTATION;
   });
 }
 
