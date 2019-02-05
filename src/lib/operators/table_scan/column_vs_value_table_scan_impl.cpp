@@ -168,7 +168,6 @@ void ColumnVsValueTableScanImpl::_scan_sorted_segment(const BaseSegment& segment
                  segment.sort_order().value() == OrderByMode::Descending,
              "Unsupported sort type");
 
-      // TODO(hendraet): Support Null values correctly
       auto segment_iterable = create_iterable_from_segment(typed_segment);
       segment_iterable.with_iterators(position_filter, [&](auto begin, auto end) {
         auto bounds = get_sorted_bounds(position_filter, begin, end, typed_segment);
@@ -215,12 +214,10 @@ void ColumnVsValueTableScanImpl::_scan_sorted_segment(const BaseSegment& segment
         } else {
           // TODO(cmfcmf): Check if this is indeed correct and not off by one or something.
           matches.reserve(std::distance(lower_it, upper_it) - (matches.capacity() - matches.size()));
-          for (; lower_it != upper_it; ++lower_it) {
-            // TODO(cmfcmf): When we deal with a non-reference segment (i.e., position_filter is not set)
-            // we should be able to simply increment an integer instead of dereferencing lower_it.
-            const auto& value = *lower_it;
-            matches.emplace_back(chunk_id, value.chunk_offset());
-          }
+
+          for (auto offset = lower_it->chunk_offset(); lower_it != upper_it; ++lower_it, ++offset) {
+              matches.emplace_back(chunk_id, offset);
+          };
         }
       });
     }

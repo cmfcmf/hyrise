@@ -179,6 +179,7 @@ std::shared_ptr<TableWrapper> unsorted_string_table(const int table_size, const 
 }
 
 void registerTableScanSortedBenchmarks() {
+  // TODO(anyone): Check results somehow/somewhere
   const auto rows = 1'000'000;
 
   const std::vector<float> selectivities{0.001, 0.01, 0.1, 0.3, 0.5, 0.7, 0.8, 0.9, 0.99};
